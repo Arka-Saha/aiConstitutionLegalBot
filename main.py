@@ -15,33 +15,18 @@ from langchain_community.document_loaders import PyPDFLoader
 
 load_dotenv()
 
-
-# ============================================================
-# GEMINI CLIENT
-# ============================================================
-
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not GEMINI_API_KEY:
     raise ValueError(
-        "GEMINI_API_KEY not found. "
-        "Check your .env file."
+        "GEMINI_API_KEY not found. Check your .env file."
     )
 
-client = genai.Client(
-    api_key=GEMINI_API_KEY
-)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 # ============================================================
 # LOCAL EMBEDDING MODEL
-# ============================================================
-# This replaces Gemini embeddings.
-#
-# Therefore:
-# - No Gemini embedding quota is used
-# - Document embeddings are generated locally
-# - Query embeddings are also generated locally
 # ============================================================
 
 print("Loading local embedding model...")
@@ -59,6 +44,11 @@ print("Local embedding model loaded.")
 
 DEBUG = False
 
+# IMPORTANT:
+# We use a new collection name because the old Chroma collection
+# did not contain source metadata.
+COLLECTION_NAME = "legal_docs_v2"
+
 
 # ============================================================
 # LOAD LEGAL DOCUMENTS
@@ -67,12 +57,31 @@ DEBUG = False
 documents = []
 
 
+def load_pdf(filename, source_name):
+    """Load a PDF and keep the source/page information."""
+    if not os.path.exists(filename):
+        print(f"WARNING: {filename} not found.")
+        return
+
+    print(f"Loading {filename}...")
+
+    loader = PyPDFLoader(filename)
+    pages = loader.load()
+
+    for page_number, page in enumerate(pages, start=1):
+        if page.page_content.strip():
+            documents.append({
+                "text": page.page_content,
+                "source": source_name,
+                "page": page_number
+            })
+
+
 # ------------------------------------------------------------
-# summary.txt
+# SUMMARY
 # ------------------------------------------------------------
 
 if os.path.exists("summary.txt"):
-
     print("Loading summary.txt...")
 
     with open(
@@ -80,72 +89,51 @@ if os.path.exists("summary.txt"):
         "r",
         encoding="utf-8"
     ) as f:
+        text = f.read()
 
-        summary_content = f.read()
-
-    documents.append(summary_content)
-
+    if text.strip():
+        documents.append({
+            "text": text,
+            "source": "summary.txt",
+            "page": 0
+        })
 else:
-
     print("WARNING: summary.txt not found.")
 
 
 # ------------------------------------------------------------
-# POSH ACT
+# LEGAL DOCUMENTS
 # ------------------------------------------------------------
 
-if os.path.exists("poshact.pdf"):
+load_pdf(
+    "poshact.pdf",
+    "POSH Act"
+)
 
-    print("Loading poshact.pdf...")
+load_pdf(
+    "constitution.pdf",
+    "Constitution of India"
+)
 
-    posh_loader = PyPDFLoader(
-        "poshact.pdf"
-    )
+load_pdf(
+    "bns.pdf",
+    "Bharatiya Nyaya Sanhita (BNS)"
+)
 
-    posh_pages = posh_loader.load()
+load_pdf(
+    "bnss.pdf",
+    "Bharatiya Nagarik Suraksha Sanhita (BNSS)"
+)
 
-    for page in posh_pages:
+load_pdf(
+    "protection_of_civil_rights_act.pdf",
+    "Protection of Civil Rights Act"
+)
 
-        if page.page_content.strip():
-
-            documents.append(
-                page.page_content
-            )
-
-else:
-
-    print("WARNING: poshact.pdf not found.")
-
-
-# ------------------------------------------------------------
-# CONSTITUTION
-# ------------------------------------------------------------
-
-if os.path.exists("constitution.pdf"):
-
-    print("Loading constitution.pdf...")
-
-    constitution_loader = PyPDFLoader(
-        "constitution.pdf"
-    )
-
-    constitution_pages = (
-        constitution_loader.load()
-    )
-
-    for page in constitution_pages:
-
-        if page.page_content.strip():
-
-            documents.append(
-                page.page_content
-            )
-
-else:
-
-    print(
-        "WARNING: constitution.pdf not found."
-    )
+load_pdf(
+    "sc_st_act.pdf",
+    "SC/ST Prevention of Atrocities Act"
+)
 
 
 # ============================================================
@@ -153,12 +141,12 @@ else:
 # ============================================================
 
 content = "\n\n".join(
-    documents
+    item["text"]
+    for item in documents
 )
 
 print(
-    f"Total document characters: "
-    f"{len(content)}"
+    f"Total document characters: {len(content)}"
 )
 
 
@@ -166,20 +154,16 @@ print(
 # LOAD CONVERSATION HISTORY
 # ============================================================
 
-if os.path.exists(
-    "conversations.txt"
-):
+if os.path.exists("conversations.txt"):
 
     with open(
         "conversations.txt",
         "r",
         encoding="utf-8"
     ) as file:
-
         convo_history = file.read()
 
 else:
-
     convo_history = ""
 
 
@@ -188,11 +172,8 @@ else:
 # ============================================================
 
 splitter = RecursiveCharacterTextSplitter(
-
     chunk_size=800,
-
     chunk_overlap=100,
-
     separators=[
         "\n",
         ". ",
@@ -200,9 +181,24 @@ splitter = RecursiveCharacterTextSplitter(
     ]
 )
 
-chunks = splitter.split_text(
-    content
-)
+chunks = []
+chunk_metadatas = []
+
+for document in documents:
+
+    source_chunks = splitter.split_text(
+        document["text"]
+    )
+
+    for chunk in source_chunks:
+
+        chunks.append(chunk)
+
+        chunk_metadatas.append({
+            "source": document["source"],
+            "page": document["page"]
+        })
+
 
 print(
     f"Total chunks: {len(chunks)}"
@@ -213,18 +209,14 @@ print(
 # CHROMADB
 # ============================================================
 
-print(
-    "Opening persistent ChromaDB..."
-)
+print("Opening persistent ChromaDB...")
 
 chroma_client = chromadb.PersistentClient(
     path="./chroma_db"
 )
 
-collection = (
-    chroma_client.get_or_create_collection(
-        name="python_docs"
-    )
+collection = chroma_client.get_or_create_collection(
+    name=COLLECTION_NAME
 )
 
 
@@ -234,70 +226,39 @@ collection = (
 
 if collection.count() == 0:
 
-    print(
-        "ChromaDB is empty."
+    print("ChromaDB collection is empty.")
+    print("Creating local document embeddings...")
+
+    chunk_embeddings = embedding_model.encode(
+        chunks,
+        show_progress_bar=True
     )
 
-    print(
-        "Creating local document embeddings..."
-    )
-
-
-    # --------------------------------------------------------
-    # LOCAL EMBEDDINGS
-    # --------------------------------------------------------
-
-    chunk_embeddings = (
-        embedding_model.encode(
-
-            chunks,
-
-            show_progress_bar=True
-        )
-    )
-
-
-    # Convert numpy arrays to lists
-    chunk_embeddings = (
-        chunk_embeddings.tolist()
-    )
-
+    chunk_embeddings = chunk_embeddings.tolist()
 
     print(
-        f"Embedded "
-        f"{len(chunk_embeddings)} chunks"
+        f"Embedded {len(chunk_embeddings)} chunks"
     )
-
-
-    # --------------------------------------------------------
-    # STORE IN CHROMADB
-    # --------------------------------------------------------
 
     collection.add(
-
         documents=chunks,
-
         embeddings=chunk_embeddings,
-
+        metadatas=chunk_metadatas,
         ids=[
-            f"chunk_{i}"
+            f"legal_chunk_{i}"
             for i in range(len(chunks))
         ]
     )
 
-
     print(
-        f"Stored "
-        f"{collection.count()} "
-        f"chunks in ChromaDB"
+        f"Stored {collection.count()} chunks in ChromaDB"
     )
-
 
 else:
 
     print(
-        f"Loaded existing ChromaDB "
-        f"with {collection.count()} chunks"
+        f"Loaded existing ChromaDB with "
+        f"{collection.count()} chunks"
     )
 
 
@@ -306,26 +267,275 @@ else:
 # ============================================================
 
 types = """
-"Police / Arrest Issue" → maps to BNSS sections on FIR filing,
-arrest rights, bail
+"Police / Arrest Issue"
+→ BNS and BNSS provisions involving criminal
+offences, assault, homicide, FIR, arrest,
+investigation, bail and criminal procedure.
 
-"Consumer / Shopping Issue" → maps to Consumer Protection Act
-(defective products, refunds, e-commerce fraud)
+"Consumer / Shopping Issue"
+→ Consumer Protection Act
+(defective products, refunds, e-commerce fraud).
 
-"Workplace Harassment" → maps to POSH Act
-(sexual harassment at workplace)
+"Workplace Harassment"
+→ POSH Act
+(sexual harassment at workplace).
 
-"Domestic Violence / Safety at Home" → maps to
-Protection of Women from Domestic Violence Act
+"Domestic Violence / Safety at Home"
+→ Protection of Women from Domestic Violence Act.
 
-"Government Info Request" → maps to RTI Act
-(how to file, timelines, appeals)
+"Government Info Request"
+→ RTI Act
+(how to file, timelines, appeals).
 
-"Child Safety Concern" → maps to POCSO Act
+"Child Safety Concern"
+→ POCSO Act.
 
-"General / Not Sure" (fallback) → skips pre-filled context,
-goes to open freeform chat
+"Untouchability / Caste Discrimination"
+→ Constitution of India, Protection of Civil Rights Act,
+and SC/ST Prevention of Atrocities Act.
+
+"General / Not Sure"
+→ fallback category.
 """
+
+
+# ============================================================
+# QUERY ROUTING
+# ============================================================
+
+def detect_legal_topics(query):
+    """
+    Detect topics that need targeted retrieval.
+
+    This is NOT used to decide the legal result.
+    It only makes sure that highly specific legal documents
+    are retrieved instead of relying only on semantic similarity.
+    """
+
+    q = query.lower()
+
+    topics = []
+
+    caste_keywords = [
+        "untouchable",
+        "untouchability",
+        "caste",
+        "caste discrimination",
+        "scheduled caste",
+        "scheduled tribes",
+        "scheduled tribe",
+        "sc/st",
+        "sc st",
+        "dalit",
+        "jati",
+        "discrimination",
+        "caste abuse",
+        "caste insult",
+        "caste slur",
+        "temple entry",
+        "denied entry",
+        "public place",
+        "social boycott"
+    ]
+
+    assault_keywords = [
+        "beat",
+        "beaten",
+        "beating",
+        "assault",
+        "hit me",
+        "attacked",
+        "attack",
+        "injury",
+        "injured",
+        "hurt",
+        "physical violence",
+        "criminal force"
+    ]
+
+    workplace_keywords = [
+        "office",
+        "workplace",
+        "employer",
+        "boss",
+        "colleague",
+        "sexual harassment",
+        "harassed at work",
+        "work harassment"
+    ]
+
+    if any(keyword in q for keyword in caste_keywords):
+        topics.append("caste")
+
+    if any(keyword in q for keyword in assault_keywords):
+        topics.append("assault")
+
+    if any(keyword in q for keyword in workplace_keywords):
+        topics.append("workplace")
+
+    return topics
+
+
+def get_target_sources(topics):
+    """Return legal sources that should receive targeted retrieval."""
+
+    sources = []
+
+    if "caste" in topics:
+        sources.extend([
+            "Constitution of India",
+            "Protection of Civil Rights Act",
+            "SC/ST Prevention of Atrocities Act"
+        ])
+
+    if "assault" in topics:
+        sources.extend([
+            "Bharatiya Nyaya Sanhita (BNS)",
+            "Bharatiya Nagarik Suraksha Sanhita (BNSS)"
+        ])
+
+    if "workplace" in topics:
+        sources.append("POSH Act")
+
+    # Remove duplicates while preserving order
+    return list(dict.fromkeys(sources))
+
+
+# ============================================================
+# RETRIEVAL
+# ============================================================
+
+def retrieve_relevant_context(
+    query,
+    query_embedding,
+    n_general=8,
+    n_targeted=8
+):
+
+    topics = detect_legal_topics(query)
+
+    target_sources = get_target_sources(topics)
+
+    retrieved = []
+
+    # --------------------------------------------------------
+    # GENERAL RETRIEVAL
+    # --------------------------------------------------------
+
+    general_results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=n_general
+    )
+
+    if general_results.get("documents"):
+
+        general_docs = general_results["documents"][0]
+        general_metas = general_results["metadatas"][0]
+
+        for doc, meta in zip(
+            general_docs,
+            general_metas
+        ):
+            retrieved.append((doc, meta))
+
+    # --------------------------------------------------------
+    # TARGETED RETRIEVAL
+    # --------------------------------------------------------
+    #
+    # This is the important change.
+    #
+    # For a caste/untouchability query, we separately search:
+    #   - Constitution
+    #   - Protection of Civil Rights Act
+    #   - SC/ST Prevention of Atrocities Act
+    #
+    # Therefore a general BNS result cannot crowd out the
+    # caste-specific provisions.
+    # --------------------------------------------------------
+
+    for source in target_sources:
+
+        try:
+
+            targeted_results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=n_targeted,
+                where={
+                    "source": source
+                }
+            )
+
+            if not targeted_results.get("documents"):
+                continue
+
+            target_docs = targeted_results["documents"][0]
+            target_metas = targeted_results["metadatas"][0]
+
+            for doc, meta in zip(
+                target_docs,
+                target_metas
+            ):
+                retrieved.append((doc, meta))
+
+        except Exception as e:
+
+            print(
+                f"Warning: targeted retrieval failed "
+                f"for {source}: {e}"
+            )
+
+    # --------------------------------------------------------
+    # REMOVE DUPLICATES
+    # --------------------------------------------------------
+
+    unique = []
+    seen = set()
+
+    for doc, meta in retrieved:
+
+        key = doc.strip()
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        unique.append((doc, meta))
+
+    # --------------------------------------------------------
+    # BUILD CONTEXT WITH SOURCE LABELS
+    # --------------------------------------------------------
+
+    context_parts = []
+
+    for index, (doc, meta) in enumerate(unique):
+
+        source = meta.get(
+            "source",
+            "Unknown source"
+        )
+
+        page = meta.get(
+            "page",
+            ""
+        )
+
+        if page:
+            source_label = (
+                f"{source}, page {page}"
+            )
+        else:
+            source_label = source
+
+        context_parts.append(
+            f"[LEGAL SOURCE: {source_label}]\n"
+            f"{doc}"
+        )
+
+    context = "\n\n".join(
+        context_parts
+    )
+
+    return context, topics, target_sources
 
 
 # ============================================================
@@ -340,15 +550,16 @@ def rag_answer(query):
 
     if DEBUG:
 
+        legal_type = "General / Not Sure"
+
+        answer = (
+            "This is a test answer as of now."
+        )
+
         json_object = {
-
             "query": query,
-
-            "response":
-                "This is a test answer as of now.",
-
-            "type":
-                "General / Not Sure"
+            "response": answer,
+            "type": legal_type
         }
 
         convo_data = (
@@ -371,157 +582,246 @@ def rag_answer(query):
             "Creating query embedding..."
         )
 
-        query_embedding = (
-            embedding_model.encode(
-                [query]
-            )[0]
-        )
+        query_embedding = embedding_model.encode(
+            [query]
+        )[0]
 
         query_embedding = (
             query_embedding.tolist()
         )
 
-
         # ====================================================
-        # RETRIEVE RELEVANT DOCUMENT CHUNKS
+        # RETRIEVE RELEVANT LEGAL DOCUMENTS
         # ====================================================
 
         print(
             "Searching legal documents..."
         )
 
-        results = collection.query(
-
-            query_embeddings=[
+        context, detected_topics, target_sources = (
+            retrieve_relevant_context(
+                query,
                 query_embedding
-            ],
-
-            n_results=5
+            )
         )
-
-
-        # ====================================================
-        # EXTRACT RETRIEVED CHUNKS
-        # ====================================================
-
-        retrieved_chunks = (
-            results["documents"][0]
-        )
-
-
-        context = "\n\n".join(
-            retrieved_chunks
-        )
-
 
         # ====================================================
         # PROMPT
         # ====================================================
 
         prompt = f"""
-You are an empathetic legal aid assistant for Indian citizens.
+You are an empathetic legal aid assistant
+for Indian citizens.
 
-Your job is to provide simple, cautious, source-grounded
-legal information.
+Your job is to provide simple, cautious,
+source-grounded legal information.
 
-RULES:
+You MUST use the legal documents provided
+in the context below.
 
-1. Only answer using the provided context below.
+============================================================
+IMPORTANT LEGAL RETRIEVAL INSTRUCTION
+============================================================
 
-2. If the context does not contain enough information to answer
-the question, clearly say that the available documents do not
-contain enough information.
+The context has been retrieved in two ways:
 
-3. Do not invent legal provisions, Acts, sections, deadlines,
-rights, procedures, authorities, or penalties.
+1. General semantic retrieval.
+2. Targeted retrieval from legal Acts that match
+   the subject of the user's question.
 
-4. Explain everything in simple, non-legal language.
+Targeted legal sources are especially important.
 
-5. Assume the user has no legal background.
+If the question concerns caste, untouchability,
+Scheduled Castes, Scheduled Tribes, caste discrimination,
+caste abuse, denial of access, or similar issues,
+carefully examine provisions from:
 
-6. Whenever the provided context supports it, mention the
-specific Act and section.
+- Constitution of India
+- Protection of Civil Rights Act
+- SC/ST Prevention of Atrocities Act
 
-7. Never give definitive legal advice.
+Do NOT ignore these sources merely because BNS
+assault provisions are also present.
 
-8. Never predict the outcome of a legal case.
+If the question concerns physical assault AND caste
+discrimination, discuss both aspects when supported
+by the context.
 
-9. If the situation sounds urgent or serious, recommend
-contacting a lawyer, legal aid clinic, or appropriate authority.
+============================================================
+LEGAL SOURCES AVAILABLE
+============================================================
 
-10. Keep the answer short, clear, practical and precise.
+- Constitution of India
+- Bharatiya Nyaya Sanhita (BNS)
+- Bharatiya Nagarik Suraksha Sanhita (BNSS)
+- POSH Act
+- Protection of Civil Rights Act
+- SC/ST Prevention of Atrocities Act
+- Other provided legal material
 
-11. Do not use stars ** for bold formatting.
+============================================================
+RULES
+============================================================
 
-12. Do not unnecessarily repeat the user's question.
+1. Only use information supported by the
+provided legal document context.
 
-13. Do not assume facts that the user has not provided.
+2. Do NOT invent an Act, section, offence,
+penalty, deadline, authority or procedure.
 
-IDENTITY RULES:
+3. If the context contains a relevant provision,
+USE IT.
 
-14. Never assume the user's gender, age, identity, occupation,
-relationship, or personal circumstances unless explicitly stated.
+4. For every important legal provision you mention,
+give:
+- Act name
+- Section/article number, if clearly available
+- What it generally covers
+- Practical relevance to the user's situation
 
-15. Use gender-neutral language such as:
-"you", "the complainant", "the affected person",
-or "the person involved".
+5. If multiple legal provisions are relevant,
+mention the important ones.
 
-16. Never address the user as "woman", "man", "he", "she",
-"sir", or "madam" unless the user explicitly provides that
-information.
+6. If the context contains relevant caste or
+untouchability provisions, you MUST discuss them.
+Do not answer only with general assault provisions.
 
-17. The person asking the question may be asking on behalf of
-someone else.
+7. If the context contains relevant SC/ST provisions,
+mention them when applicable.
 
-18. Do not assume that the user is the person affected by
-the situation.
+8. Do not say "the documents do not contain enough
+information" if relevant information is present
+in the retrieved context.
 
-LEGAL CATEGORY RULE:
+9. Explain everything in simple language.
 
-Choose exactly one category from the provided categories.
+10. Assume the user has no legal background.
 
-Available categories:
+11. Never give definitive legal advice.
+
+12. Never predict the outcome of a case.
+
+13. If the situation involves immediate danger,
+serious physical violence, death, sexual violence,
+or another serious offence, clearly recommend
+appropriate emergency/police/legal assistance.
+
+14. Do not encourage hiding evidence, destroying
+evidence, threatening anyone, retaliation, or
+evading lawful investigation.
+
+15. Keep the answer practical and concise.
+
+16. Do not use markdown bold with **.
+
+17. Do not unnecessarily repeat the user's question.
+
+18. Do not assume facts that the user has not provided.
+
+============================================================
+IDENTITY RULES
+============================================================
+
+19. Never assume the user's gender, age, identity,
+occupation, caste, religion, or relationship to the
+situation unless explicitly stated.
+
+20. Use neutral language such as:
+"you", "the complainant",
+"the affected person", or
+"the person involved".
+
+21. Do not address the user as "woman", "man",
+"he", "she", "sir", or "madam" unless explicitly
+provided.
+
+22. The user may be asking on behalf of another person.
+
+23. Do not assume the user is the person affected.
+
+============================================================
+LEGAL CATEGORY RULE
+============================================================
+
+Choose exactly ONE category from:
 
 {types}
 
+IMPORTANT CATEGORY PRIORITY:
 
-CONTEXT FROM LEGAL DOCUMENTS:
+If the user's question clearly involves
+untouchability, caste discrimination, Scheduled
+Caste/Tribe issues, caste abuse, caste-based
+exclusion, or similar conduct, choose:
+
+"Untouchability / Caste Discrimination"
+
+even if physical assault is also mentioned.
+
+If the question is only about assault/arrest/criminal
+procedure and has no caste-discrimination aspect,
+choose:
+
+"Police / Arrest Issue"
+
+============================================================
+RETRIEVED LEGAL CONTEXT
+============================================================
 
 {context}
 
+============================================================
+DETECTED TOPICS
+============================================================
 
-RECENT CONVERSATION HISTORY:
+{detected_topics}
+
+Targeted legal sources searched:
+
+{target_sources}
+
+============================================================
+RECENT CONVERSATION HISTORY
+============================================================
 
 {convo_history[-5000:]}
 
-
-USER QUESTION:
+============================================================
+USER QUESTION
+============================================================
 
 {query}
 
+============================================================
+OUTPUT REQUIREMENT
+============================================================
 
-OUTPUT REQUIREMENT:
-
-Return ONLY a Python-style list containing exactly two strings.
+Return ONLY a Python-style list containing
+exactly two strings.
 
 The first string must be the legal category.
 
 The second string must be the answer.
 
+The answer should:
+- directly address the user's question
+- identify relevant legal provisions from the context
+- include Act names and section/article numbers when available
+- explain what those provisions mean in simple language
+- give practical next steps
+- recommend professional/legal/emergency assistance when appropriate
+
 Example:
 
-["Workplace Harassment", "The person affected may..."]
-
+["Untouchability / Caste Discrimination",
+"Based on the provided legal material, ..."]
 
 Do not add:
-
-- Markdown
-- Code fences
-- Explanations outside the list
+- Markdown code fences
+- explanations outside the list
 - "Here is your answer"
-- Extra fields
+- extra fields
 """
-
 
         # ====================================================
         # GEMINI GENERATION
@@ -532,12 +832,9 @@ Do not add:
         )
 
         response = client.models.generate_content(
-
             model="gemini-3.6-flash",
-
             contents=prompt
         )
-
 
         # ====================================================
         # GET RESPONSE TEXT
@@ -545,92 +842,145 @@ Do not add:
 
         response_text = (
             response.text.strip()
+            if response.text
+            else ""
         )
-
 
         print(
             f"\nQ: {query}"
         )
 
+        # ====================================================
+        # PARSE RESPONSE
+        # ====================================================
 
-        # ====================================================
-        # PARSE GEMINI RESPONSE
-        # ====================================================
+        legal_type = "General / Not Sure"
+        answer = response_text
 
         try:
 
-            # Remove markdown code fences
-            if response_text.startswith(
-                "```"
-            ):
+            if response_text.startswith("```"):
 
                 response_text = (
                     response_text
-                    .replace(
-                        "```python",
-                        ""
-                    )
-                    .replace(
-                        "```json",
-                        ""
-                    )
-                    .replace(
-                        "```",
-                        ""
-                    )
+                    .replace("```json", "")
+                    .replace("```python", "")
+                    .replace("```", "")
                     .strip()
                 )
 
-
-            response_list = (
-                ast.literal_eval(
-                    response_text
-                )
+            response_list = ast.literal_eval(
+                response_text
             )
 
-
-            # Make sure we actually received
-            # two values
-
             if (
-                not isinstance(
-                    response_list,
-                    list
-                )
-                or len(response_list) < 2
+                isinstance(response_list, list)
+                and len(response_list) >= 2
             ):
+
+                legal_type = str(
+                    response_list[0]
+                ).strip()
+
+                answer = str(
+                    response_list[1]
+                ).strip()
+
+            else:
 
                 raise ValueError(
                     "Invalid response format"
                 )
 
-
-            legal_type = str(
-                response_list[0]
-            )
-
-            answer = str(
-                response_list[1]
-            )
-
-
         except Exception as e:
 
             print(
-                "\nWarning: Gemini did not "
-                "follow the expected format."
+                "\nWarning: Gemini did not follow "
+                "the expected format."
             )
 
             print(
                 f"Parsing error: {e}"
             )
 
+            # ------------------------------------------------
+            # RECOVERY
+            # ------------------------------------------------
+
+            try:
+
+                start = response_text.find("[")
+                end = response_text.rfind("]")
+
+                if (
+                    start != -1
+                    and end != -1
+                    and end > start
+                ):
+
+                    cleaned_response = (
+                        response_text[
+                            start:end + 1
+                        ]
+                    )
+
+                    response_list = ast.literal_eval(
+                        cleaned_response
+                    )
+
+                    if (
+                        isinstance(response_list, list)
+                        and len(response_list) >= 2
+                    ):
+
+                        legal_type = str(
+                            response_list[0]
+                        ).strip()
+
+                        answer = str(
+                            response_list[1]
+                        ).strip()
+
+                    else:
+
+                        raise ValueError(
+                            "Recovered response is invalid"
+                        )
+
+                else:
+
+                    raise ValueError(
+                        "Could not find list in response"
+                    )
+
+            except Exception as recovery_error:
+
+                print(
+                    f"Recovery failed: "
+                    f"{recovery_error}"
+                )
+
+                legal_type = (
+                    "General / Not Sure"
+                )
+
+                answer = response_text
+
+        # ====================================================
+        # SAFETY NET FOR CATEGORY
+        # ====================================================
+        #
+        # If the model still chooses Police / Arrest Issue
+        # for an obvious caste/untouchability query, correct
+        # ONLY the category. The legal answer remains generated
+        # from the retrieved context.
+        # ====================================================
+
+        if "caste" in detected_topics:
+
             legal_type = (
-                "General / Not Sure"
+                "Untouchability / Caste Discrimination"
             )
-
-            answer = response_text
-
 
         # ====================================================
         # PRINT ANSWER
@@ -644,20 +994,15 @@ Do not add:
             f"\nAnswer:\n{answer}"
         )
 
-
         # ====================================================
         # SAVE CONVERSATION
         # ====================================================
 
         json_object = {
-
             "query": query,
-
             "response": answer,
-
             "type": legal_type
         }
-
 
         convo_data = (
             json.dumps(
@@ -666,7 +1011,6 @@ Do not add:
             )
             + "\n"
         )
-
 
     # ========================================================
     # SAVE HISTORY
@@ -681,7 +1025,6 @@ Do not add:
         file.write(
             convo_data
         )
-
 
     # ========================================================
     # RETURN ANSWER
@@ -700,15 +1043,19 @@ Do not add:
 if __name__ == "__main__":
 
     print()
+
     print(
         "======================================"
     )
+
     print(
         " Indian Legal Aid Bot"
     )
+
     print(
         "======================================"
     )
+
     print()
 
     q = input(
