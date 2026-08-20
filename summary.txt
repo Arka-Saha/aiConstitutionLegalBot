@@ -1,0 +1,266 @@
+===================================================================
+LEGAL AID CHATBOT — KNOWLEDGE BASE (India)
+Concise reference data for RAG-based Q&A. Each section is self-contained
+for chunking. Cite the [SECTION ID] when answering.
+===================================================================
+
+-------------------------------------------------------------------
+[FR-1] Article 14 — Right to Equality
+-------------------------------------------------------------------
+The State shall not deny to any person equality before the law or
+equal protection of the laws within the territory of India. This
+means the law applies equally to everyone, regardless of status —
+no one is above the law, and no one can be discriminated against
+by the law.
+
+-------------------------------------------------------------------
+[FR-2] Article 15 — Prohibition of Discrimination
+-------------------------------------------------------------------
+The State cannot discriminate against any citizen on grounds of
+religion, race, caste, sex, or place of birth. Access to shops,
+restaurants, public wells, roads, and places of public entertainment
+cannot be restricted based on these grounds. Special provisions can
+be made for women, children, and socially/educationally backward
+classes (e.g., reservations).
+
+-------------------------------------------------------------------
+[FR-3] Article 19 — Right to Freedom
+-------------------------------------------------------------------
+All citizens have the right to:
+(a) Freedom of speech and expression
+(b) Assemble peacefully without arms
+(c) Form associations or unions
+(d) Move freely throughout India
+(e) Reside and settle in any part of India
+(g) Practice any profession or carry on any occupation, trade, or business
+These rights are subject to "reasonable restrictions" the State can
+impose for public order, security, decency, or morality.
+
+-------------------------------------------------------------------
+[FR-4] Article 21 — Right to Life and Personal Liberty
+-------------------------------------------------------------------
+No person shall be deprived of their life or personal liberty except
+according to procedure established by law. Courts have expanded this
+to include: right to privacy, right to a clean environment, right to
+livelihood, right to shelter, right to health, and right to a speedy
+trial. This is one of the most litigated and protective rights in
+the Constitution.
+
+-------------------------------------------------------------------
+[FR-5] Article 22 — Protection Against Arrest and Detention
+-------------------------------------------------------------------
+Any person who is arrested has the right to:
+1. Be informed of the grounds of arrest as soon as possible
+2. Consult and be defended by a legal practitioner of their choice
+3. Be produced before the nearest magistrate within 24 hours of
+   arrest (excluding travel time)
+4. Not be detained beyond 24 hours without magistrate authorization
+These protections do not apply to enemy aliens or persons arrested
+under preventive detention laws (which have separate safeguards).
+
+-------------------------------------------------------------------
+[FR-6] Article 32 — Right to Constitutional Remedies
+-------------------------------------------------------------------
+Any citizen can directly approach the Supreme Court if their
+Fundamental Rights are violated. The Court can issue writs:
+Habeas Corpus (produce a detained person), Mandamus (order to
+perform public duty), Prohibition (stop lower court overreach),
+Certiorari (transfer case/quash order), Quo Warranto (challenge
+illegal holding of public office). Dr. Ambedkar called this the
+"heart and soul" of the Constitution.
+
+===================================================================
+CRIMINAL PROCEDURE — FIR & ARREST RIGHTS (BNSS 2023)
+===================================================================
+
+-------------------------------------------------------------------
+[CR-1] Filing an FIR (First Information Report)
+-------------------------------------------------------------------
+- Anyone can file an FIR at the police station having jurisdiction
+  over where the crime occurred — for cognizable offenses (serious
+  crimes like theft, assault, murder), police MUST register it.
+- Police cannot refuse to register an FIR for a cognizable offense.
+  If they refuse, the complainant can:
+  1. Send the complaint in writing to the Superintendent of Police
+  2. File a complaint before the Magistrate under BNSS
+  3. Approach the State Human Rights Commission or file online (many
+     states have e-FIR portals for certain offenses)
+- A "Zero FIR" can be filed at ANY police station regardless of
+  jurisdiction, which is then transferred to the correct station.
+- The complainant is entitled to a free copy of the FIR after registration.
+
+-------------------------------------------------------------------
+[CR-2] Rights During Arrest
+-------------------------------------------------------------------
+- Right to know the grounds of arrest immediately.
+- Right to inform a friend/relative/person of choice about the
+  arrest and location of detention.
+- Right to be produced before a magistrate within 24 hours.
+- Right to consult a lawyer of choice; if unable to afford one,
+  entitled to free legal aid.
+- Women can only be arrested by/in the presence of a woman police
+  officer, and generally not after sunset or before sunrise except
+  in exceptional circumstances with prior permission.
+- Right to a medical examination to record injuries at time of arrest.
+
+-------------------------------------------------------------------
+[CR-3] Bail Basics
+-------------------------------------------------------------------
+- Bailable offenses: bail is a matter of right, police/court must grant it.
+- Non-bailable offenses: bail is at court's discretion, based on
+  severity of offense, risk of flight, tampering with evidence, etc.
+- Anticipatory bail can be sought BEFORE arrest if a person fears
+  arrest in a non-bailable offense (filed in Sessions Court/High Court).
+
+===================================================================
+RIGHT TO INFORMATION ACT, 2005
+===================================================================
+
+-------------------------------------------------------------------
+[RTI-1] How to File an RTI Application
+-------------------------------------------------------------------
+- Any citizen can file an RTI application to any public authority
+  (government department, PSU, government-funded body) requesting
+  information.
+- Application must be addressed to the Public Information Officer
+  (PIO) of the relevant department, in writing (or electronically
+  where available), in English/Hindi/local official language.
+- Fee: Rs. 10 (varies slightly by state); no fee for BPL applicants.
+- Application should clearly state what information is sought — no
+  need to give reasons for the request.
+
+-------------------------------------------------------------------
+[RTI-2] Response Timelines
+-------------------------------------------------------------------
+- Standard requests: PIO must respond within 30 days.
+- If information concerns life or liberty of a person: must respond
+  within 48 hours.
+- If application is transferred to another department: timeline
+  extends by 5 days.
+- If PIO fails to respond in time, it is deemed a refusal — applicant
+  can file a First Appeal within 30 days to the appellate authority
+  in the same department.
+- If unsatisfied with the First Appeal outcome, a Second Appeal can
+  be filed with the State/Central Information Commission.
+
+-------------------------------------------------------------------
+[RTI-3] What Cannot Be Sought
+-------------------------------------------------------------------
+Information exempted under Section 8 includes: matters affecting
+national security/sovereignty, information forbidden by court,
+trade secrets, personal information with no public interest,
+information that would endanger someone's life/safety, and Cabinet
+papers (until decision is made).
+
+===================================================================
+CONSUMER PROTECTION ACT, 2019
+===================================================================
+
+-------------------------------------------------------------------
+[CP-1] Consumer Rights
+-------------------------------------------------------------------
+Every consumer has the right to:
+1. Safety — protection against goods/services hazardous to life
+2. Information — right to know quality, quantity, price of goods
+3. Choice — access to a variety of goods at competitive prices
+4. Be Heard — right to file complaints and be heard
+5. Redressal — right to seek compensation for unfair practices
+6. Consumer Education
+
+-------------------------------------------------------------------
+[CP-2] Filing a Consumer Complaint
+-------------------------------------------------------------------
+- Complaints can be filed at District, State, or National Consumer
+  Disputes Redressal Commission depending on the value of goods/
+  services and compensation claimed:
+  - District Commission: up to Rs. 1 crore
+  - State Commission: Rs. 1 crore to Rs. 10 crore
+  - National Commission: above Rs. 10 crore
+- Can be filed online via the E-Daakhil portal (edaakhil.nic.in).
+- No court fee for claims up to Rs. 5 lakh.
+- Complaint should include: details of the seller, nature of
+  defect/deficiency, proof of purchase, and relief sought.
+
+-------------------------------------------------------------------
+[CP-3] E-Commerce Specific Protections
+-------------------------------------------------------------------
+- E-commerce platforms must display total price, delivery timelines,
+  return/refund/exchange policies clearly.
+- Prohibits unfair trade practices like false advertising, refusal
+  to take back defective goods, and flash-sale manipulation.
+- Consumers can report grievances to the platform's designated
+  Grievance Officer, who must acknowledge within 48 hours and
+  resolve within 1 month.
+
+===================================================================
+WOMEN'S SAFETY LAWS
+===================================================================
+
+-------------------------------------------------------------------
+[WS-1] Workplace Sexual Harassment (POSH Act, 2013)
+-------------------------------------------------------------------
+- Every workplace with 10+ employees must have an Internal
+  Complaints Committee (ICC).
+- Complaint must be filed within 3 months of the incident (extendable
+  by 3 more months if valid reason shown).
+- ICC must complete inquiry within 90 days and the employer must
+  act on recommendations within 60 days of receiving the report.
+- Complainant can seek interim relief (transfer, leave) during inquiry.
+- If no ICC exists, complaint can be filed with the Local Complaints
+  Committee (LCC) at the district level.
+
+-------------------------------------------------------------------
+[WS-2] Domestic Violence Protection (PWDVA, 2005)
+-------------------------------------------------------------------
+- Covers physical, sexual, verbal, emotional, and economic abuse
+  by a spouse, partner, or family member.
+- A woman can file a complaint with a Protection Officer, Police,
+  or directly approach a Magistrate.
+- Reliefs available: Protection Order (stops further abuse),
+  Residence Order (right to stay in the shared household),
+  Monetary Relief (compensation, maintenance), Custody Order.
+- Complaints can be filed regardless of whether the woman has
+  initiated any other legal proceeding (e.g., divorce).
+
+-------------------------------------------------------------------
+[WS-3] Emergency Contacts (Women & General Safety)
+-------------------------------------------------------------------
+- Women's Helpline: 181
+- Police Emergency: 112
+- National Commission for Women: 011-26942369
+- Domestic Violence Helpline: 181 / 1091
+
+===================================================================
+LEGAL AID INFRASTRUCTURE (For Escalation Feature)
+===================================================================
+
+-------------------------------------------------------------------
+[LA-1] Free Legal Aid Eligibility (Legal Services Authorities Act, 1987)
+-------------------------------------------------------------------
+Free legal aid is available through NALSA/State Legal Services
+Authority (SLSA) to:
+- Women and children
+- Persons with disabilities
+- SC/ST community members
+- Victims of trafficking or beggar
+- Industrial workmen
+- Persons in custody (including in a protective home)
+- Persons with annual income below the state-specified limit
+  (varies by state, commonly Rs. 1-3 lakh/year)
+- Victims of mass disaster, violence, flood, drought, earthquake
+
+-------------------------------------------------------------------
+[LA-2] How to Access Free Legal Aid
+-------------------------------------------------------------------
+- Apply at the nearest District Legal Services Authority (DLSA)
+  office, Taluka Legal Services Committee, or via NALSA's website
+  (nalsa.gov.in).
+- Legal aid clinics operate in most district courts and many
+  villages via Panel Lawyers.
+- NALSA Helpline: 15100 (toll-free)
+- Services include: free lawyer representation, court fee waiver,
+  document/affidavit drafting help, and mediation/Lok Adalat access.
+
+===================================================================
+END OF FILE
+===================================================================
