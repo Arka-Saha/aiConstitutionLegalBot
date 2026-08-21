@@ -1,0 +1,14 @@
+To,
+The Consumer Disputes Redressal Forum
+
+Subject: Complaint against {{ company_name }}
+
+I, {{ complainant_name }}, purchased {{ product_service }} from 
+{{ company_name }} on {{ purchase_date }}.
+
+Issue faced: {{ issue_description }}
+
+Desired resolution: {{ desired_resolution }}
+
+Date: {{ date }}
+Signature: _______________

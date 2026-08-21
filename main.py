@@ -1,12 +1,79 @@
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from google import genai
-from sentence_transformers import SentenceTransformer
-import chromadb
 import os
 import json
 import ast
+
+import streamlit as st
+
 from dotenv import load_dotenv
+from google import genai
+
+from sentence_transformers import SentenceTransformer
+
+import chromadb
+
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
+
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+
+import os
+from jinja2 import Environment, FileSystemLoader
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.units import mm
+
+
+
+base_dir = os.path.dirname(os.path.abspath(__file__))
+env = Environment(loader=FileSystemLoader(base_dir))
+
+template_police = env.get_template("police_comp_template.txt")
+template_consumer = env.get_template("consumer_comp_template.txt")
+template_rti = env.get_template("rti_template.txt")
+
+rti_data = {
+    "applicant_name": "Arka Saha",
+    "address": "Cluster 11, IOCL Haldia Township, West Bengal, 721607",
+    "department": "Municipal Corporation",
+    "info_requested": "Status of road repair complaint filed on 01/08/2026, including expected completion date and officer assigned",
+    "date": "21/08/2026"
+}
+
+consumer_data = {
+    "complainant_name": "Arka Saha",
+    "company_name": "Meow Electronics Pvt Ltd",
+    "product_service": "Samsung Refrigerator (Model SR-450)",
+    "purchase_date": "15/06/2026",
+    "issue_description": "Refrigerator stopped cooling within 2 months of purchase. Company refused free repair despite valid warranty and has not responded to 3 follow-up calls.",
+    "desired_resolution": "Full replacement of the product or complete refund of Rs. 32,000",
+    "date": "21/08/2026"
+}
+
+police_data = {
+    "complainant_name": "Arka Saha",
+    "police_station": "Haldia Police Station, West Bengal",
+    "incident_type": "Theft of two-wheeler",
+    "incident_datetime": "20/08/2026, approximately 9:30 PM",
+    "incident_location": "Parking area near Spencers supermart",
+    "incident_description": "My motorcycle (Registration No. WB1234567) was stolen from the parking area while I was at a nearby shop for approximately 20 minutes.",
+    "witnesses": "None identified at the time; CCTV footage may be available from nearby shops",
+    "date": "21/08/2026"
+}
+
+
+
+# ============================================================
+# PAGE CONFIG
+# ============================================================
+
+st.set_page_config(
+    page_title="Chatbot with Constitutional and Legal Awareness",
+    layout="centered"
+)
 
 
 # ============================================================
@@ -22,20 +89,14 @@ if not GEMINI_API_KEY:
         "GEMINI_API_KEY not found. Check your .env file."
     )
 
-client = genai.Client(api_key=GEMINI_API_KEY)
-
 
 # ============================================================
-# LOCAL EMBEDDING MODEL
+# GEMINI CLIENT
 # ============================================================
 
-print("Loading local embedding model...")
-
-embedding_model = SentenceTransformer(
-    "all-MiniLM-L6-v2"
+client = genai.Client(
+    api_key=GEMINI_API_KEY
 )
-
-print("Local embedding model loaded.")
 
 
 # ============================================================
@@ -44,222 +105,7 @@ print("Local embedding model loaded.")
 
 DEBUG = False
 
-# IMPORTANT:
-# We use a new collection name because the old Chroma collection
-# did not contain source metadata.
 COLLECTION_NAME = "legal_docs_v2"
-
-
-# ============================================================
-# LOAD LEGAL DOCUMENTS
-# ============================================================
-
-documents = []
-
-
-def load_pdf(filename, source_name):
-    """Load a PDF and keep the source/page information."""
-    if not os.path.exists(filename):
-        print(f"WARNING: {filename} not found.")
-        return
-
-    print(f"Loading {filename}...")
-
-    loader = PyPDFLoader(filename)
-    pages = loader.load()
-
-    for page_number, page in enumerate(pages, start=1):
-        if page.page_content.strip():
-            documents.append({
-                "text": page.page_content,
-                "source": source_name,
-                "page": page_number
-            })
-
-
-# ------------------------------------------------------------
-# SUMMARY
-# ------------------------------------------------------------
-
-if os.path.exists("summary.txt"):
-    print("Loading summary.txt...")
-
-    with open(
-        "summary.txt",
-        "r",
-        encoding="utf-8"
-    ) as f:
-        text = f.read()
-
-    if text.strip():
-        documents.append({
-            "text": text,
-            "source": "summary.txt",
-            "page": 0
-        })
-else:
-    print("WARNING: summary.txt not found.")
-
-
-# ------------------------------------------------------------
-# LEGAL DOCUMENTS
-# ------------------------------------------------------------
-
-load_pdf(
-    "poshact.pdf",
-    "POSH Act"
-)
-
-load_pdf(
-    "constitution.pdf",
-    "Constitution of India"
-)
-
-load_pdf(
-    "bns.pdf",
-    "Bharatiya Nyaya Sanhita (BNS)"
-)
-
-load_pdf(
-    "bnss.pdf",
-    "Bharatiya Nagarik Suraksha Sanhita (BNSS)"
-)
-
-load_pdf(
-    "protection_of_civil_rights_act.pdf",
-    "Protection of Civil Rights Act"
-)
-
-load_pdf(
-    "sc_st_act.pdf",
-    "SC/ST Prevention of Atrocities Act"
-)
-
-
-# ============================================================
-# COMBINE DOCUMENTS
-# ============================================================
-
-content = "\n\n".join(
-    item["text"]
-    for item in documents
-)
-
-print(
-    f"Total document characters: {len(content)}"
-)
-
-
-# ============================================================
-# LOAD CONVERSATION HISTORY
-# ============================================================
-
-if os.path.exists("conversations.txt"):
-
-    with open(
-        "conversations.txt",
-        "r",
-        encoding="utf-8"
-    ) as file:
-        convo_history = file.read()
-
-else:
-    convo_history = ""
-
-
-# ============================================================
-# CHUNKING
-# ============================================================
-
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=800,
-    chunk_overlap=100,
-    separators=[
-        "\n",
-        ". ",
-        " "
-    ]
-)
-
-chunks = []
-chunk_metadatas = []
-
-for document in documents:
-
-    source_chunks = splitter.split_text(
-        document["text"]
-    )
-
-    for chunk in source_chunks:
-
-        chunks.append(chunk)
-
-        chunk_metadatas.append({
-            "source": document["source"],
-            "page": document["page"]
-        })
-
-
-print(
-    f"Total chunks: {len(chunks)}"
-)
-
-
-# ============================================================
-# CHROMADB
-# ============================================================
-
-print("Opening persistent ChromaDB...")
-
-chroma_client = chromadb.PersistentClient(
-    path="./chroma_db"
-)
-
-collection = chroma_client.get_or_create_collection(
-    name=COLLECTION_NAME
-)
-
-
-# ============================================================
-# CREATE DOCUMENT EMBEDDINGS ONLY IF NEEDED
-# ============================================================
-
-if collection.count() == 0:
-
-    print("ChromaDB collection is empty.")
-    print("Creating local document embeddings...")
-
-    chunk_embeddings = embedding_model.encode(
-        chunks,
-        show_progress_bar=True
-    )
-
-    chunk_embeddings = chunk_embeddings.tolist()
-
-    print(
-        f"Embedded {len(chunk_embeddings)} chunks"
-    )
-
-    collection.add(
-        documents=chunks,
-        embeddings=chunk_embeddings,
-        metadatas=chunk_metadatas,
-        ids=[
-            f"legal_chunk_{i}"
-            for i in range(len(chunks))
-        ]
-    )
-
-    print(
-        f"Stored {collection.count()} chunks in ChromaDB"
-    )
-
-else:
-
-    print(
-        f"Loaded existing ChromaDB with "
-        f"{collection.count()} chunks"
-    )
 
 
 # ============================================================
@@ -300,23 +146,336 @@ and SC/ST Prevention of Atrocities Act.
 
 
 # ============================================================
+# LOAD RAG RESOURCES
+#
+# This function is cached.
+#
+# The following are loaded only once:
+#
+# 1. Embedding model
+# 2. PDFs
+# 3. Text chunks
+# 4. ChromaDB
+# 5. Document embeddings, if required
+# ============================================================
+
+@st.cache_resource
+def load_rag_resources():
+
+    print()
+    print("======================================")
+    print("Loading RAG resources...")
+    print("======================================")
+    print()
+
+    # --------------------------------------------------------
+    # EMBEDDING MODEL
+    # --------------------------------------------------------
+
+    print("Loading local embedding model...")
+
+    embedding_model = SentenceTransformer(
+        "all-MiniLM-L6-v2"
+    )
+
+    print("Local embedding model loaded.")
+
+    # --------------------------------------------------------
+    # DOCUMENTS
+    # --------------------------------------------------------
+
+    documents = []
+
+    def load_pdf(filename, source_name):
+
+        if not os.path.exists(filename):
+
+            print(
+                f"WARNING: {filename} not found."
+            )
+
+            return
+
+        print(
+            f"Loading {filename}..."
+        )
+
+        loader = PyPDFLoader(
+            filename
+        )
+
+        pages = loader.load()
+
+        for page_number, page in enumerate(
+            pages,
+            start=1
+        ):
+
+            if page.page_content.strip():
+
+                documents.append({
+
+                    "text": page.page_content,
+
+                    "source": source_name,
+
+                    "page": page_number
+
+                })
+
+    # --------------------------------------------------------
+    # SUMMARY.TXT
+    # --------------------------------------------------------
+
+    if os.path.exists(
+        "summary.txt"
+    ):
+
+        print(
+            "Loading summary.txt..."
+        )
+
+        with open(
+            "summary.txt",
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            text = f.read()
+
+        if text.strip():
+
+            documents.append({
+
+                "text": text,
+
+                "source": "summary.txt",
+
+                "page": 0
+
+            })
+
+    else:
+
+        print(
+            "WARNING: summary.txt not found."
+        )
+
+    # --------------------------------------------------------
+    # LEGAL PDFS
+    # --------------------------------------------------------
+
+    load_pdf(
+        "poshact.pdf",
+        "POSH Act"
+    )
+
+    load_pdf(
+        "constitution.pdf",
+        "Constitution of India"
+    )
+
+    load_pdf(
+        "bns.pdf",
+        "Bharatiya Nyaya Sanhita (BNS)"
+    )
+
+    load_pdf(
+        "bnss.pdf",
+        "Bharatiya Nagarik Suraksha Sanhita (BNSS)"
+    )
+
+    load_pdf(
+        "protection_of_civil_rights_act.pdf",
+        "Protection of Civil Rights Act"
+    )
+
+    load_pdf(
+        "sc_st_act.pdf",
+        "SC/ST Prevention of Atrocities Act"
+    )
+
+    print(
+        f"Loaded {len(documents)} document pages."
+    )
+
+    # --------------------------------------------------------
+    # CHUNKING
+    # --------------------------------------------------------
+
+    print(
+        "Creating document chunks..."
+    )
+
+    splitter = RecursiveCharacterTextSplitter(
+
+        chunk_size=800,
+
+        chunk_overlap=100,
+
+        separators=[
+            "\n",
+            ". ",
+            " "
+        ]
+
+    )
+
+    chunks = []
+
+    chunk_metadatas = []
+
+    for document in documents:
+
+        source_chunks = splitter.split_text(
+            document["text"]
+        )
+
+        for chunk in source_chunks:
+
+            chunks.append(
+                chunk
+            )
+
+            chunk_metadatas.append({
+
+                "source": document["source"],
+
+                "page": document["page"]
+
+            })
+
+    print(
+        f"Total chunks: {len(chunks)}"
+    )
+
+    # --------------------------------------------------------
+    # CHROMADB
+    # --------------------------------------------------------
+
+    print(
+        "Opening persistent ChromaDB..."
+    )
+
+    chroma_client = chromadb.PersistentClient(
+
+        path="./chroma_db"
+
+    )
+
+    collection = chroma_client.get_or_create_collection(
+
+        name=COLLECTION_NAME
+
+    )
+
+    # --------------------------------------------------------
+    # CREATE DOCUMENT EMBEDDINGS
+    # --------------------------------------------------------
+
+    if collection.count() == 0:
+
+        print(
+            "ChromaDB collection is empty."
+        )
+
+        print(
+            "Creating document embeddings..."
+        )
+
+        chunk_embeddings = embedding_model.encode(
+
+            chunks,
+
+            show_progress_bar=True
+
+        )
+
+        chunk_embeddings = (
+
+            chunk_embeddings.tolist()
+
+        )
+
+        print(
+            f"Embedded {len(chunk_embeddings)} chunks."
+        )
+
+        collection.add(
+
+            documents=chunks,
+
+            embeddings=chunk_embeddings,
+
+            metadatas=chunk_metadatas,
+
+            ids=[
+
+                f"legal_chunk_{i}"
+
+                for i in range(
+                    len(chunks)
+                )
+
+            ]
+
+        )
+
+        print(
+            f"Stored {collection.count()} chunks "
+            "in ChromaDB."
+        )
+
+    else:
+
+        print(
+            "Existing ChromaDB found."
+        )
+
+        print(
+            f"Loaded {collection.count()} chunks."
+        )
+
+    print()
+    print("======================================")
+    print("RAG resources loaded successfully.")
+    print("======================================")
+    print()
+
+    return (
+
+        embedding_model,
+
+        collection
+
+    )
+
+
+# ============================================================
+# LOAD RAG RESOURCES
+# ============================================================
+
+embedding_model, collection = (
+    load_rag_resources()
+)
+
+
+# ============================================================
 # QUERY ROUTING
 # ============================================================
 
 def detect_legal_topics(query):
-    """
-    Detect topics that need targeted retrieval.
-
-    This is NOT used to decide the legal result.
-    It only makes sure that highly specific legal documents
-    are retrieved instead of relying only on semantic similarity.
-    """
 
     q = query.lower()
 
     topics = []
 
+    # --------------------------------------------------------
+    # CASTE
+    # --------------------------------------------------------
+
     caste_keywords = [
+
         "untouchable",
         "untouchability",
         "caste",
@@ -336,9 +495,15 @@ def detect_legal_topics(query):
         "denied entry",
         "public place",
         "social boycott"
+
     ]
 
+    # --------------------------------------------------------
+    # ASSAULT
+    # --------------------------------------------------------
+
     assault_keywords = [
+
         "beat",
         "beaten",
         "beating",
@@ -351,9 +516,15 @@ def detect_legal_topics(query):
         "hurt",
         "physical violence",
         "criminal force"
+
     ]
 
+    # --------------------------------------------------------
+    # WORKPLACE
+    # --------------------------------------------------------
+
     workplace_keywords = [
+
         "office",
         "workplace",
         "employer",
@@ -362,59 +533,116 @@ def detect_legal_topics(query):
         "sexual harassment",
         "harassed at work",
         "work harassment"
+
     ]
 
-    if any(keyword in q for keyword in caste_keywords):
-        topics.append("caste")
+    # --------------------------------------------------------
+    # DETECT TOPICS
+    # --------------------------------------------------------
 
-    if any(keyword in q for keyword in assault_keywords):
-        topics.append("assault")
+    if any(
 
-    if any(keyword in q for keyword in workplace_keywords):
-        topics.append("workplace")
+        keyword in q
+
+        for keyword in caste_keywords
+
+    ):
+
+        topics.append(
+            "caste"
+        )
+
+    if any(
+
+        keyword in q
+
+        for keyword in assault_keywords
+
+    ):
+
+        topics.append(
+            "assault"
+        )
+
+    if any(
+
+        keyword in q
+
+        for keyword in workplace_keywords
+
+    ):
+
+        topics.append(
+            "workplace"
+        )
 
     return topics
 
 
+# ============================================================
+# TARGET SOURCES
+# ============================================================
+
 def get_target_sources(topics):
-    """Return legal sources that should receive targeted retrieval."""
 
     sources = []
 
     if "caste" in topics:
+
         sources.extend([
+
             "Constitution of India",
+
             "Protection of Civil Rights Act",
+
             "SC/ST Prevention of Atrocities Act"
+
         ])
 
     if "assault" in topics:
+
         sources.extend([
+
             "Bharatiya Nyaya Sanhita (BNS)",
+
             "Bharatiya Nagarik Suraksha Sanhita (BNSS)"
+
         ])
 
     if "workplace" in topics:
-        sources.append("POSH Act")
 
-    # Remove duplicates while preserving order
-    return list(dict.fromkeys(sources))
+        sources.append(
+            "POSH Act"
+        )
+
+    return list(
+        dict.fromkeys(sources)
+    )
 
 
 # ============================================================
-# RETRIEVAL
+# RETRIEVE CONTEXT
 # ============================================================
 
 def retrieve_relevant_context(
+
     query,
+
     query_embedding,
+
     n_general=8,
+
     n_targeted=8
+
 ):
 
-    topics = detect_legal_topics(query)
+    topics = detect_legal_topics(
+        query
+    )
 
-    target_sources = get_target_sources(topics)
+    target_sources = get_target_sources(
+        topics
+    )
 
     retrieved = []
 
@@ -423,34 +651,53 @@ def retrieve_relevant_context(
     # --------------------------------------------------------
 
     general_results = collection.query(
-        query_embeddings=[query_embedding],
+
+        query_embeddings=[
+
+            query_embedding
+
+        ],
+
         n_results=n_general
+
     )
 
-    if general_results.get("documents"):
+    if general_results.get(
+        "documents"
+    ):
 
-        general_docs = general_results["documents"][0]
-        general_metas = general_results["metadatas"][0]
+        general_docs = (
+
+            general_results[
+                "documents"
+            ][0]
+
+        )
+
+        general_metas = (
+
+            general_results[
+                "metadatas"
+            ][0]
+
+        )
 
         for doc, meta in zip(
+
             general_docs,
+
             general_metas
+
         ):
-            retrieved.append((doc, meta))
+
+            retrieved.append(
+
+                (doc, meta)
+
+            )
 
     # --------------------------------------------------------
     # TARGETED RETRIEVAL
-    # --------------------------------------------------------
-    #
-    # This is the important change.
-    #
-    # For a caste/untouchability query, we separately search:
-    #   - Constitution
-    #   - Protection of Civil Rights Act
-    #   - SC/ST Prevention of Atrocities Act
-    #
-    # Therefore a general BNS result cannot crowd out the
-    # caste-specific provisions.
     # --------------------------------------------------------
 
     for source in target_sources:
@@ -458,30 +705,66 @@ def retrieve_relevant_context(
         try:
 
             targeted_results = collection.query(
-                query_embeddings=[query_embedding],
+
+                query_embeddings=[
+
+                    query_embedding
+
+                ],
+
                 n_results=n_targeted,
+
                 where={
+
                     "source": source
+
                 }
+
             )
 
-            if not targeted_results.get("documents"):
+            if not targeted_results.get(
+                "documents"
+            ):
+
                 continue
 
-            target_docs = targeted_results["documents"][0]
-            target_metas = targeted_results["metadatas"][0]
+            target_docs = (
+
+                targeted_results[
+                    "documents"
+                ][0]
+
+            )
+
+            target_metas = (
+
+                targeted_results[
+                    "metadatas"
+                ][0]
+
+            )
 
             for doc, meta in zip(
+
                 target_docs,
+
                 target_metas
+
             ):
-                retrieved.append((doc, meta))
+
+                retrieved.append(
+
+                    (doc, meta)
+
+                )
 
         except Exception as e:
 
             print(
-                f"Warning: targeted retrieval failed "
-                f"for {source}: {e}"
+
+                f"Warning: targeted retrieval "
+                f"failed for {source}: {e}"
+
             )
 
     # --------------------------------------------------------
@@ -489,6 +772,7 @@ def retrieve_relevant_context(
     # --------------------------------------------------------
 
     unique = []
+
     seen = set()
 
     for doc, meta in retrieved:
@@ -496,46 +780,73 @@ def retrieve_relevant_context(
         key = doc.strip()
 
         if key in seen:
+
             continue
 
         seen.add(key)
-        unique.append((doc, meta))
+
+        unique.append(
+
+            (doc, meta)
+
+        )
 
     # --------------------------------------------------------
-    # BUILD CONTEXT WITH SOURCE LABELS
+    # BUILD CONTEXT
     # --------------------------------------------------------
 
     context_parts = []
 
-    for index, (doc, meta) in enumerate(unique):
+    for doc, meta in unique:
 
         source = meta.get(
+
             "source",
+
             "Unknown source"
+
         )
 
         page = meta.get(
+
             "page",
+
             ""
+
         )
 
         if page:
+
             source_label = (
+
                 f"{source}, page {page}"
+
             )
+
         else:
+
             source_label = source
 
         context_parts.append(
+
             f"[LEGAL SOURCE: {source_label}]\n"
             f"{doc}"
+
         )
 
     context = "\n\n".join(
         context_parts
     )
 
-    return context, topics, target_sources
+    return (
+
+        context,
+
+        topics,
+
+        target_sources
+
+    )
 
 
 # ============================================================
@@ -544,74 +855,84 @@ def retrieve_relevant_context(
 
 def rag_answer(query):
 
-    # ========================================================
-    # DEBUG MODE
-    # ========================================================
+    # --------------------------------------------------------
+    # QUERY EMBEDDING
+    # --------------------------------------------------------
 
-    if DEBUG:
+    print(
+        "\nCreating query embedding..."
+    )
 
-        legal_type = "General / Not Sure"
+    query_embedding = embedding_model.encode(
 
-        answer = (
-            "This is a test answer as of now."
-        )
+        [query]
 
-        json_object = {
-            "query": query,
-            "response": answer,
-            "type": legal_type
-        }
+    )[0]
 
-        convo_data = (
-            json.dumps(
-                json_object,
-                ensure_ascii=False
-            )
-            + "\n"
-        )
+    query_embedding = (
 
-        print(convo_data)
+        query_embedding.tolist()
+
+    )
+
+    # --------------------------------------------------------
+    # RETRIEVE CONTEXT
+    # --------------------------------------------------------
+
+    print(
+        "Searching legal documents..."
+    )
+
+    (
+
+        context,
+
+        detected_topics,
+
+        target_sources
+
+    ) = retrieve_relevant_context(
+
+        query,
+
+        query_embedding
+
+    )
+
+    # --------------------------------------------------------
+    # CONVERSATION HISTORY
+    # --------------------------------------------------------
+
+    if os.path.exists(
+        "conversations.txt"
+    ):
+
+        with open(
+
+            "conversations.txt",
+
+            "r",
+
+            encoding="utf-8"
+
+        ) as file:
+
+            convo_history = file.read()
 
     else:
 
-        # ====================================================
-        # EMBED USER QUERY LOCALLY
-        # ====================================================
+        convo_history = ""
 
-        print(
-            "Creating query embedding..."
-        )
+    # --------------------------------------------------------
+    # PROMPT
+    # --------------------------------------------------------
 
-        query_embedding = embedding_model.encode(
-            [query]
-        )[0]
+    prompt = f"""
 
-        query_embedding = (
-            query_embedding.tolist()
-        )
-
-        # ====================================================
-        # RETRIEVE RELEVANT LEGAL DOCUMENTS
-        # ====================================================
-
-        print(
-            "Searching legal documents..."
-        )
-
-        context, detected_topics, target_sources = (
-            retrieve_relevant_context(
-                query,
-                query_embedding
-            )
-        )
-
-        # ====================================================
-        # PROMPT
-        # ====================================================
-
-        prompt = f"""
-You are an empathetic legal aid assistant
+You are an EMPATHETIC legal aid assistant
 for Indian citizens.
+
+If the QUERY is in a different language, you need to convert it to English first, and then answer in the same language as the QUERY.
 
 Your job is to provide simple, cautious,
 source-grounded legal information.
@@ -627,7 +948,7 @@ The context has been retrieved in two ways:
 
 1. General semantic retrieval.
 2. Targeted retrieval from legal Acts that match
-   the subject of the user's question.
+the subject of the user's question.
 
 Targeted legal sources are especially important.
 
@@ -674,6 +995,7 @@ USE IT.
 
 4. For every important legal provision you mention,
 give:
+
 - Act name
 - Section/article number, if clearly available
 - What it generally covers
@@ -684,60 +1006,63 @@ mention the important ones.
 
 6. If the context contains relevant caste or
 untouchability provisions, you MUST discuss them.
-Do not answer only with general assault provisions.
 
 7. If the context contains relevant SC/ST provisions,
 mention them when applicable.
 
-8. Do not say "the documents do not contain enough
-information" if relevant information is present
-in the retrieved context.
+8. Explain everything in simple language.
 
-9. Explain everything in simple language.
+9. Assume the user has no legal background.
 
-10. Assume the user has no legal background.
+10. Never give definitive legal advice.
 
-11. Never give definitive legal advice.
+11. Never predict the outcome of a case.
 
-12. Never predict the outcome of a case.
-
-13. If the situation involves immediate danger,
+12. If the situation involves immediate danger,
 serious physical violence, death, sexual violence,
 or another serious offence, clearly recommend
 appropriate emergency/police/legal assistance.
 
-14. Do not encourage hiding evidence, destroying
+13. Do not encourage hiding evidence, destroying
 evidence, threatening anyone, retaliation, or
 evading lawful investigation.
 
-15. Keep the answer practical and concise.
+14. Keep the answer practical and concise.
 
-16. Do not use markdown bold with **.
+15. Do not use markdown bold with **.
 
-17. Do not unnecessarily repeat the user's question.
+16. Do not unnecessarily repeat the user's question.
 
-18. Do not assume facts that the user has not provided.
+17. Do not assume facts that the user has not provided.
+
+18. You are an EMPATHETIC legal aid assistant, not a judge or lawyer. Someimtes, when needed, show empathy and understanding of the user's situation, in a formal and preciese phrase.
+
+19. Make sure your answers are not too long, because the user may not read long answers. If the answer is long, break it into sections with clear headings.
+
+20. ANYTHING outside this legal and constituinoal things are to be bluntly ignored. Do not answer anything outside the legal and constitutional context. Simply add a short phrase to ignore and avoid such queries.
 
 ============================================================
 IDENTITY RULES
 ============================================================
 
-19. Never assume the user's gender, age, identity,
+18. Never assume the user's gender, age, identity,
 occupation, caste, religion, or relationship to the
 situation unless explicitly stated.
 
-20. Use neutral language such as:
-"you", "the complainant",
-"the affected person", or
-"the person involved".
+19. Use neutral language such as:
 
-21. Do not address the user as "woman", "man",
+"you"
+"the complainant"
+"the affected person"
+"the person involved"
+
+20. Do not address the user as "woman", "man",
 "he", "she", "sir", or "madam" unless explicitly
 provided.
 
-22. The user may be asking on behalf of another person.
+21. The user may be asking on behalf of another person.
 
-23. Do not assume the user is the person affected.
+22. Do not assume the user is the person affected.
 
 ============================================================
 LEGAL CATEGORY RULE
@@ -804,6 +1129,7 @@ The first string must be the legal category.
 The second string must be the answer.
 
 The answer should:
+
 - directly address the user's question
 - identify relevant legal provisions from the context
 - include Act names and section/article numbers when available
@@ -813,253 +1139,715 @@ The answer should:
 
 Example:
 
-["Untouchability / Caste Discrimination",
-"Based on the provided legal material, ..."]
+["type of legal issue",
+"your generated answer"]
 
 Do not add:
+
 - Markdown code fences
 - explanations outside the list
 - "Here is your answer"
 - extra fields
+
 """
 
-        # ====================================================
-        # GEMINI GENERATION
-        # ====================================================
+    # --------------------------------------------------------
+    # GEMINI
+    # --------------------------------------------------------
+
+    print(
+        "Generating legal response..."
+    )
+
+    response = client.models.generate_content(
+
+        model="gemini-3.6-flash",
+
+        contents=prompt
+
+    )
+
+    response_text = (
+
+        response.text.strip()
+
+        if response.text
+
+        else ""
+
+    )
+
+    # --------------------------------------------------------
+    # PARSE RESPONSE
+    # --------------------------------------------------------
+
+    legal_type = (
+        "General / Not Sure"
+    )
+
+    answer = response_text
+
+    try:
+
+        if response_text.startswith(
+            "```"
+        ):
+
+            response_text = (
+
+                response_text
+
+                .replace(
+                    "```json",
+                    ""
+                )
+
+                .replace(
+                    "```python",
+                    ""
+                )
+
+                .replace(
+                    "```",
+                    ""
+                )
+
+                .strip()
+
+            )
+
+        response_list = ast.literal_eval(
+            response_text
+        )
+
+        if (
+
+            isinstance(
+                response_list,
+                list
+            )
+
+            and len(response_list) >= 2
+
+        ):
+
+            legal_type = str(
+                response_list[0]
+            ).strip()
+
+            answer = str(
+                response_list[1]
+            ).strip()
+
+        else:
+
+            raise ValueError(
+                "Invalid response format"
+            )
+
+    except Exception as e:
 
         print(
-            "Generating legal response..."
-        )
-
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=prompt
-        )
-
-        # ====================================================
-        # GET RESPONSE TEXT
-        # ====================================================
-
-        response_text = (
-            response.text.strip()
-            if response.text
-            else ""
+            "Warning: Gemini did not follow "
+            "the expected format."
         )
 
         print(
-            f"\nQ: {query}"
+            f"Parsing error: {e}"
         )
 
-        # ====================================================
-        # PARSE RESPONSE
-        # ====================================================
-
-        legal_type = "General / Not Sure"
-        answer = response_text
+        # ----------------------------------------------------
+        # RECOVERY
+        # ----------------------------------------------------
 
         try:
 
-            if response_text.startswith("```"):
+            start = response_text.find(
+                "["
+            )
 
-                response_text = (
-                    response_text
-                    .replace("```json", "")
-                    .replace("```python", "")
-                    .replace("```", "")
-                    .strip()
-                )
-
-            response_list = ast.literal_eval(
-                response_text
+            end = response_text.rfind(
+                "]"
             )
 
             if (
-                isinstance(response_list, list)
-                and len(response_list) >= 2
+
+                start != -1
+
+                and end != -1
+
+                and end > start
+
             ):
 
-                legal_type = str(
-                    response_list[0]
-                ).strip()
+                cleaned_response = (
 
-                answer = str(
-                    response_list[1]
-                ).strip()
+                    response_text[
+                        start:end + 1
+                    ]
 
-            else:
-
-                raise ValueError(
-                    "Invalid response format"
                 )
 
-        except Exception as e:
+                response_list = (
 
-            print(
-                "\nWarning: Gemini did not follow "
-                "the expected format."
-            )
+                    ast.literal_eval(
 
-            print(
-                f"Parsing error: {e}"
-            )
+                        cleaned_response
 
-            # ------------------------------------------------
-            # RECOVERY
-            # ------------------------------------------------
+                    )
 
-            try:
-
-                start = response_text.find("[")
-                end = response_text.rfind("]")
+                )
 
                 if (
-                    start != -1
-                    and end != -1
-                    and end > start
+
+                    isinstance(
+                        response_list,
+                        list
+                    )
+
+                    and len(response_list) >= 2
+
                 ):
 
-                    cleaned_response = (
-                        response_text[
-                            start:end + 1
-                        ]
-                    )
+                    legal_type = str(
+                        response_list[0]
+                    ).strip()
 
-                    response_list = ast.literal_eval(
-                        cleaned_response
-                    )
-
-                    if (
-                        isinstance(response_list, list)
-                        and len(response_list) >= 2
-                    ):
-
-                        legal_type = str(
-                            response_list[0]
-                        ).strip()
-
-                        answer = str(
-                            response_list[1]
-                        ).strip()
-
-                    else:
-
-                        raise ValueError(
-                            "Recovered response is invalid"
-                        )
+                    answer = str(
+                        response_list[1]
+                    ).strip()
 
                 else:
 
                     raise ValueError(
-                        "Could not find list in response"
+                        "Recovered response is invalid"
                     )
 
-            except Exception as recovery_error:
+            else:
 
-                print(
-                    f"Recovery failed: "
-                    f"{recovery_error}"
+                raise ValueError(
+                    "Could not find list in response"
                 )
 
-                legal_type = (
-                    "General / Not Sure"
-                )
+        except Exception as recovery_error:
 
-                answer = response_text
-
-        # ====================================================
-        # SAFETY NET FOR CATEGORY
-        # ====================================================
-        #
-        # If the model still chooses Police / Arrest Issue
-        # for an obvious caste/untouchability query, correct
-        # ONLY the category. The legal answer remains generated
-        # from the retrieved context.
-        # ====================================================
-
-        if "caste" in detected_topics:
+            print(
+                f"Recovery failed: "
+                f"{recovery_error}"
+            )
 
             legal_type = (
-                "Untouchability / Caste Discrimination"
+                "General / Not Sure"
             )
 
-        # ====================================================
-        # PRINT ANSWER
-        # ====================================================
+            answer = response_text
 
-        print(
-            f"\nType: {legal_type}"
+    # --------------------------------------------------------
+    # CATEGORY SAFETY NET
+    # --------------------------------------------------------
+
+    if "caste" in detected_topics:
+
+        legal_type = (
+            "Untouchability / Caste Discrimination"
         )
 
-        print(
-            f"\nAnswer:\n{answer}"
+    # --------------------------------------------------------
+    # PRINT
+    # --------------------------------------------------------
+
+    print(
+        f"\nType: {legal_type}"
+    )
+
+    print(
+        f"\nAnswer:\n{answer}"
+    )
+
+    # --------------------------------------------------------
+    # SAVE CONVERSATION
+    # --------------------------------------------------------
+
+    json_object = {
+
+        "query": query,
+
+        "response": answer,
+
+        "type": legal_type
+
+    }
+
+    convo_data = (
+
+        json.dumps(
+
+            json_object,
+
+            ensure_ascii=False
+
         )
 
-        # ====================================================
-        # SAVE CONVERSATION
-        # ====================================================
+        + "\n"
 
-        json_object = {
-            "query": query,
-            "response": answer,
-            "type": legal_type
-        }
-
-        convo_data = (
-            json.dumps(
-                json_object,
-                ensure_ascii=False
-            )
-            + "\n"
-        )
-
-    # ========================================================
-    # SAVE HISTORY
-    # ========================================================
+    )
 
     with open(
+
         "conversations.txt",
+
         "a+",
+
         encoding="utf-8"
+
     ) as file:
 
         file.write(
             convo_data
         )
 
-    # ========================================================
-    # RETURN ANSWER
-    # ========================================================
+    # --------------------------------------------------------
+    # RETURN
+    # --------------------------------------------------------
 
     return {
+
         "type": legal_type,
+
         "answer": answer
+
     }
 
 
 # ============================================================
-# TEST MODE
+# CREATE HARDCODED PDF
 # ============================================================
 
-if __name__ == "__main__":
+def create_hardcoded_pdf(t):
 
-    print()
+    filename = f"generate_{t}_doc.pdf"
 
-    print(
-        "======================================"
+    # c = canvas.Canvas(
+
+    #     filename,
+
+    #     pagesize=A4
+
+    # )
+
+    # width, height = A4
+
+    # # --------------------------------------------------------
+    # # TITLE
+    # # --------------------------------------------------------
+
+    # c.setFont(
+
+    #     "Helvetica-Bold",
+
+    #     20
+
+    # )
+
+    # c.drawString(
+
+    #     50,
+
+    #     height - 60,
+
+    #     "AI Legal Assistant"
+
+    # )
+
+    # # --------------------------------------------------------
+    # # CONTENT
+    # # --------------------------------------------------------
+
+    # c.setFont(
+
+    #     "Helvetica",
+
+    #     12
+
+    # )
+
+    # lines = [
+
+    #     "This is a hardcoded PDF response.",
+
+    #     "",
+
+    #     "The user requested image creation.",
+
+    #     "Actual image generation will be connected",
+
+    #     "to this part of the application later.",
+
+    #     "",
+
+    #     "For now, this PDF is only a placeholder."
+
+    # ]
+
+    # y = height - 110
+
+    # for line in lines:
+
+    #     c.drawString(
+
+    #         50,
+
+    #         y,
+
+    #         line
+
+    #     )
+
+    #     y -= 22
+
+    # # --------------------------------------------------------
+    # # SAVE
+    # # --------------------------------------------------------
+
+    # c.save()
+
+    # # --------------------------------------------------------
+    # # READ PDF INTO MEMORY
+    # # --------------------------------------------------------
+
+    if t == "police":
+        # template = env.get_template("police_comp_template.txt")
+        filled_text = template_police.render(**police_data)
+
+    if t == "rti": 
+            # template = env.get_template("rti_comp_template.txt")
+            filled_text = template_rti.render(**rti_data)
+    if t == "consumer": 
+            # template = env.get_template("consumer_comp_template.txt")
+            filled_text = template_consumer.render(**consumer_data)
+
+    output_path = f"output_files/{filename}.pdf"
+    # c = canvas.Canvas(output_path, pagesize=A4)
+    # width, height = A4
+    # y = height - 60
+    # for line in filled_text.split("\n"):
+    #     c.drawString(50, y, line)
+    #     y -= 18
+    #     if y < 50:
+    #         c.showPage()
+    #         y = height - 60
+    # c.save()
+
+
+
+    ############
+
+    doc = SimpleDocTemplate(
+        output_path,
+        pagesize=A4,
+        rightMargin=20 * mm,
+        leftMargin=20 * mm,
+        topMargin=20 * mm,
+        bottomMargin=20 * mm
     )
 
-    print(
-        " Indian Legal Aid Bot"
+    styles = getSampleStyleSheet()
+
+    body_style = styles["BodyText"]
+
+    body_style.fontName = "Helvetica"
+    body_style.fontSize = 11
+    body_style.leading = 16
+    body_style.spaceAfter = 6
+
+    story = []
+
+    for line in filled_text.split("\n"):
+
+        line = line.strip()
+
+        # Preserve blank lines
+        if not line:
+            story.append(
+                Spacer(1, 6)
+            )
+            continue
+
+        # Escape characters that Paragraph interprets as HTML
+        line = (
+            line
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
+        # Paragraph automatically wraps long text
+        story.append(
+            Paragraph(
+                line,
+                body_style
+            )
+        )
+
+    doc.build(story)
+
+
+# output_path = os.path.join(base_dir, f"output_files/police_{police_data['complainant_name']}.pdf")
+# text_to_pdf(filled_text, output_path)
+
+
+    ########
+
+
+
+
+
+
+
+
+
+
+
+    with open(
+
+        output_path,
+
+        "rb"
+
+    ) as file:
+
+        pdf_bytes = file.read()
+
+    return pdf_bytes
+
+
+# ============================================================
+# DISPLAY PDF CARD
+# ============================================================
+
+def display_pdf_card(pdf_bytes, key_suffix):
+
+    # Small PDF icon
+    st.write("📄")
+
+    # Filename
+    st.write("**generate_document.pdf**")
+
+    # One-line description
+    st.caption("Your generated PDF document is ready.")
+
+    # Download button
+    st.download_button(
+        label="Download PDF",
+        data=pdf_bytes,
+        file_name="generated_answer.pdf",
+        mime="application/pdf",
+        key=f"download_pdf_{key_suffix}"
     )
 
-    print(
-        "======================================"
-    )
+# ============================================================
+# STREAMLIT HEADER
+# ============================================================
 
-    print()
+st.title(
+    "Chatbot with Constitutional and Legal Awareness"
+)
 
-    q = input(
-        "Enter query: "
-    )
+st.caption(
+    "Ask a question related to your legal rights and constitutional protections."
+)
 
-    rag_answer(q)
+
+# ============================================================
+# INITIALIZE SESSION STATE
+# ============================================================
+
+if "messages" not in st.session_state:
+
+    st.session_state.messages = []
+
+
+# ============================================================
+# DISPLAY CHAT HISTORY
+# ============================================================
+
+for index, message in enumerate(
+    st.session_state.messages
+):
+
+    with st.chat_message(
+        message["role"]
+    ):
+
+        st.write(
+            message["content"]
+        )
+
+        # ----------------------------------------------------
+        # DISPLAY PDF FOR OLD MESSAGE
+        # ----------------------------------------------------
+
+        if (
+
+            message["role"] == "assistant"
+
+            and message.get("pdf")
+
+        ):
+
+            pdf_bytes = (
+                message.get("pdf_bytes")
+            )
+
+            if pdf_bytes:
+
+                display_pdf_card(
+
+                    pdf_bytes,
+
+                    f"history_{index}"
+
+                )
+
+
+# ============================================================
+# USER INPUT
+# ============================================================
+
+user_input = st.chat_input(
+    "Ask your legal question..."
+)
+
+
+# ============================================================
+# PROCESS USER INPUT
+# ============================================================
+
+if user_input:
+
+    # --------------------------------------------------------
+    # SAVE USER MESSAGE
+    # --------------------------------------------------------
+
+    st.session_state.messages.append({
+
+        "role": "user",
+
+        "content": user_input
+
+    })
+
+    # --------------------------------------------------------
+    # DISPLAY USER MESSAGE
+    # --------------------------------------------------------
+
+    with st.chat_message(
+        "user"
+    ):
+
+        st.write(
+            user_input
+        )
+
+    # ========================================================
+    # CREATE IMAGE → PDF
+    # ========================================================
+
+    if "create image" in user_input.lower():
+
+        # ----------------------------------------------------
+        # GENERATE PDF
+        # ---------------------------------------------------
+
+        if "police" in user_input.lower():
+
+            # pdf_bytes = create_police_pdf
+            pdf_bytes = create_hardcoded_pdf("police")
+
+            
+        if "rti" in user_input.lower():
+
+            # pdf_bytes = create_police_pdf
+            pdf_bytes = create_hardcoded_pdf("rti")
+            
+        if "consumer" in user_input.lower():
+
+            # pdf_bytes = create_police_pdf
+            pdf_bytes = create_hardcoded_pdf()
+        # ----------------------------------------------------
+        # SAVE PDF IN SESSION
+        # ----------------------------------------------------
+
+        st.session_state.generated_pdf = (
+            pdf_bytes
+        )
+
+        # ----------------------------------------------------
+        # ASSISTANT RESPONSE
+        # ----------------------------------------------------
+
+        with st.chat_message(
+            "assistant"
+        ):
+
+            st.write(
+                "Your document is ready."
+            )
+
+            display_pdf_card(
+
+                pdf_bytes,
+
+                f"current_{len(st.session_state.messages)}"
+
+            )
+
+        # ----------------------------------------------------
+        # SAVE ASSISTANT MESSAGE
+        # ----------------------------------------------------
+
+        st.session_state.messages.append({
+
+            "role": "assistant",
+
+            "content": "Your PDF is ready.",
+
+            "pdf": True,
+
+            "pdf_bytes": pdf_bytes
+
+        })
+
+    # ========================================================
+    # NORMAL RAG QUESTION
+    # ========================================================
+
+    else:
+
+        with st.chat_message(
+            "assistant"
+        ):
+
+            with st.spinner(
+                "Searching legal documents..."
+            ):
+
+                result = rag_answer(
+                    user_input
+                )
+
+            st.write(
+                result["answer"]
+            )
+
+        # ----------------------------------------------------
+        # SAVE ASSISTANT MESSAGE
+        # ----------------------------------------------------
+
+        st.session_state.messages.append({
+
+            "role": "assistant",
+
+            "content": result["answer"]
+
+        })

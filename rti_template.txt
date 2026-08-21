@@ -1,0 +1,18 @@
+To,
+The Public Information Officer,
+{{ department }}
+
+Subject: Request for Information under RTI Act, 2005
+
+Sir/Madam,
+
+I, {{ applicant_name }}, residing at {{ address }}, would like to request the following information 
+under Section 6(1) of the RTI Act, 2005:
+
+{{ info_requested }}
+
+I am enclosing the prescribed fee as required.
+
+Date: {{ date }}
+Signature: _______________
+Name: {{ applicant_name }}

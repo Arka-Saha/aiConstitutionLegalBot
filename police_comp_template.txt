@@ -1,0 +1,17 @@
+To,
+The Station House Officer,
+{{ police_station }}
+
+Subject: Complaint regarding {{ incident_type }}
+
+I, {{ complainant_name }}, wish to report the following incident:
+
+Date & Time: {{ incident_datetime }}
+Location: {{ incident_location }}
+Description: {{ incident_description }}
+Witnesses (if any): {{ witnesses }}
+
+I request appropriate action.
+
+Date: {{ date }}
+Signature: _______________
